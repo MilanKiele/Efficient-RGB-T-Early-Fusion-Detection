@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from kornia.filters import Sobel
 from kornia.metrics import SSIM
+from mmcv.cnn import build_conv_layer
 
 class RGBTStem(nn.Module):
     def __init__(self, c2):
@@ -55,3 +56,38 @@ class ResNetRGBTEarlyModifiedStem(ResNet):
             if i in self.out_indices:
                 outs.append(x)
         return tuple(outs)
+
+
+
+@MODELS.register_module()
+class ResNetRGBTEarlyModifiedStemConv1S1(ResNetRGBTEarlyModifiedStem):
+    def __init__(self, **kwargs):
+        super(ResNetRGBTEarlyModifiedStemConv1S1, self).__init__(**kwargs)
+        self.conv1 = build_conv_layer(
+            self.conv_cfg,
+            kwargs['in_channels'],
+            self.stem_channels,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False)
+
+    def forward(self, x):
+        """Forward function."""
+        h, w = x.shape[2:]
+        x = self.stem(x)
+        assert x.shape[2:] == (h, w)
+
+        x = self.conv1(x)
+        x = self.norm1(x)
+        x = self.relu(x)
+        outs = []
+        for i, layer_name in enumerate(self.res_layers):
+            res_layer = getattr(self, layer_name)
+            x = res_layer(x)
+            if i in self.out_indices:
+                outs.append(x)
+        return tuple(outs)
+
+
+
